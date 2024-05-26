@@ -1,0 +1,217 @@
+{
+    "info": {
+        "experiment_name": "Joint-DENSE-StrainMat-TOS-Regression"
+    },
+    "data": {
+        "format": "npy",
+        "npy_filename": "/p/miauva/data/Jerry/medical-images/Cardiac-FromKen/task-specific/2023-09-25-DENSE-guided-cine-registration/displacement_for_cine_lv_myo_masks_merged-20231103-Joint.npy",
+        "resize": false,
+        "n_read": -1,
+        "data_to_feed": [
+            {
+                "key": "cine_lv_myo_masks"
+            },
+            {
+                "key": "strain_matrix"
+            },
+            {
+                "key": "TOS"
+            }
+        ],
+        "augment_translate_times_y": 0,
+        "augment_translate_times_x": 0,
+        "augment_rotate_times": 0,
+        "augment_rotate_interval": 10
+    },
+    "data_split": {
+        "method": "by_pattern",
+        "shuffle": false,
+        "label_role": "label",
+        "splits": {
+            "train": {
+                "role": "train",
+                "patterns": [
+                    ".*"
+                ],
+                "exclude_patterns": [
+                    ".*SET02-CT35.*",
+                    ".*SET01-CT14.*",
+                    ".*SET01-CT16.*",
+                    ".*SET01-CT19.*",
+                    ".*SET02-CT33.*",
+                    ".*SETOLD01-CRT_120.*",
+                    ".*SETOLD02-134.*",
+                    ".*SETOLD02-136.*",
+                    ".*SETOLD02-148.*",
+                    ".*SETOLD02-150.*",
+                    ".*SETOLD01-CRT_104.*",
+                    ".*SET03-UP34.*"
+                ],
+                "repeat_times": 0,
+                "keep_augmented": true
+            },
+            "val": {
+                "role": "val",
+                "patterns": [
+                    ".*SETOLD02-134.*",
+                    ".*SET01-CT14.*",
+                    ".*SET01-CT16.*",
+                    ".*SET01-CT19.*",
+                    ".*SET02-CT33.*",
+                    ".*SETOLD01-CRT_120.*"
+                ],
+                "keep_augmented": true
+            },
+            "test": {
+                "role": "test",
+                "patterns": [
+                    ".*SET01-CT14.*",
+                    ".*SETOLD02-134.*",
+                    ".*SETOLD02-136.*",
+                    ".*SETOLD02-148.*",
+                    ".*SETOLD02-150.*",
+                    ".*SET03-UP34.*"
+                ],
+                "keep_augmented": true
+            }
+        }
+    },
+    "datasets": {
+        "train": {
+            "type": "JointDataset",
+            "data_split": [
+                "train"
+            ],
+            "cine_myo_mask_key": "cine_lv_myo_masks",
+            "n_myo_frames_to_use_for_regression": 20,
+            "n_strainmat_frames_to_use_for_regression": 40
+        },
+        "val": {
+            "type": "JointDataset",
+            "data_split": [
+                "val"
+            ],
+            "cine_myo_mask_key": "cine_lv_myo_masks",
+            "n_myo_frames_to_use_for_regression": 20,
+            "n_strainmat_frames_to_use_for_regression": 40
+        },
+        "test": {
+            "type": "JointDataset",
+            "data_split": [
+                "test"
+            ],
+            "cine_myo_mask_key": "cine_lv_myo_masks",
+            "n_myo_frames_to_use_for_regression": 20,
+            "n_strainmat_frames_to_use_for_regression": 40
+        }
+    },
+    "networks": {
+        "joint_register_strainmat": {
+            "type": "JointRegisterStrainMatNet",
+            "strainmat_net_type": "ResNet3D",
+            "n_strain_matrix_frames": 40,
+            "strainmat_smoothing_method": "SVD",
+            "strainmat_smoothing_SVD_rank": 5
+        },
+        "LMA": {
+            "type": "NetStrainMat2LMA",
+            "LMA_task": "TOS_regression",
+            "num_conv_layers": 3,
+            "inner_conv_channel_num": 16,
+            "input_channel_num": 1,
+            "n_frames": 40,
+            "n_sectors": 126,
+            "n_classes": 1
+        }
+    },
+    "training": {
+        "inference_only": false,
+        "seed": 2434,
+        "scheme": "joint_registration_strainmat_LMA",
+        "LMA_task": "TOS_regression",
+        "epochs_without_improvement_tolerance": 50,
+        "LMA_threshold": 20,
+        "batch_size": 10,
+        "epochs": 1000,
+        "test_as_val": false,
+        "optimizers": {
+            "joint_register_strainmat": {
+                "type": "Adam",
+                "target": "Generator",
+                "weight_decay": 0.0001,
+                "learning_rate": 0.0001,
+                "lr_scheduler": {
+                    "enable": true,
+                    "type": "CosineAnnealingLR",
+                    "T_max": 30,
+                    "eta_min": 1e-05
+                }
+            },
+            "LMA": {
+                "type": "Adam",
+                "target": "LMA",
+                "weight_decay": 0.0001,
+                "learning_rate": 0.0005,
+                "lr_scheduler": {
+                    "enable": true,
+                    "type": "CosineAnnealingLR",
+                    "T_max": 30,
+                    "eta_min": 1e-05
+                }
+            }
+        }
+    },
+    "losses": {
+        "registration_reconstruction": {
+            "type": "regression",
+            "prediction": "various",
+            "target": "registration_target",
+            "weight": 1,
+            "weight_comment": "about 250",
+            "criterion": "registration_reconstruction",
+            "enable": true,
+            "regularization_weight": 0.1,
+            "sigma": 0.03,
+            "gamma": 1.0
+        },
+        "registration_supervision": {
+            "type": "regression",
+            "prediction": "strainmat",
+            "target": "strainmat",
+            "weight": 1000,
+            "weight_comment": "about 0.05",
+            "criterion": "MSELoss",
+            "enable": true
+        },
+        "TOS_regression": {
+            "type": "regression",
+            "input": "input",
+            "prediction": "TOS",
+            "target": "TOS",
+            "weight": 0.005,
+            "weight_comment": "about 1500",
+            "criterion": "MSELoss",
+            "params": {},
+            "enable": true
+        }
+    },
+    "saving": {
+        "save_final_model": true,
+        "save_best_only": true,
+        "save_model_num": 3,
+        "save_prediction_method": "single_file",
+        "performance_log_dir": "/p/mmcardiac/Resaerch_projects/cardiac/cardiac-segmentation/cardiac-segmentation-2/codeV6/exp_results/wandb_sweep_logs",
+        "save_checkpoint": true,
+        "save_prediction": true,
+        "save_KeyboardInterrupt": true
+    },
+    "others": {
+        "use_wandb": true,
+        "wandb_sweep_file": "./configs/test_wandb_sweep.yaml",
+        "wandb_visualize_interval": 0.1,
+        "wandb_sweep": true,
+        "wandb sweep file": "./configs/test_wandb_sweep.yaml",
+        "print_config": true
+    },
+    "repeat_times": -1
+}
